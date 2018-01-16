@@ -1,7 +1,32 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include "include_base_utils.h"
 #include "cryptonote_core/cryptonote_basic_impl.h"
@@ -81,9 +106,7 @@ bool test_transaction_generation_and_ring_signature()
     oe.second = boost::get<txout_to_key>(tx_mine_6.vout[0].target).key;
     src.outputs.push_back(oe);
 
-    crypto::public_key tx_pub_key = null_pkey;
-    cryptonote::parse_and_validate_tx_extra(tx_mine_2, tx_pub_key);
-    src.real_out_tx_key = tx_pub_key;
+    src.real_out_tx_key = cryptonote::get_tx_pub_key_from_extra(tx_mine_2);
     src.real_output = 1;
     src.real_output_in_tx_index = 0;
   }
@@ -95,7 +118,7 @@ bool test_transaction_generation_and_ring_signature()
   destinations.push_back(td);
 
   transaction tx_rc1;
-  bool r = construct_tx(miner_acc2.get_keys(), sources, destinations, tx_rc1, 0);
+  bool r = construct_tx(miner_acc2.get_keys(), sources, destinations, std::vector<uint8_t>(), tx_rc1, 0);
   CHECK_AND_ASSERT_MES(r, false, "failed to construct transaction");
 
   crypto::hash pref_hash = get_transaction_prefix_hash(tx_rc1);

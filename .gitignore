@@ -1,2 +1,7 @@
+.DS_Store
 /build
 /tags
+
+# vim swap files
+*.swp
+*.swo

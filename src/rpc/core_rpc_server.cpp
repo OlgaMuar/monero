@@ -1,7 +1,32 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include <boost/foreach.hpp>
 #include "include_base_utils.h"
@@ -49,24 +74,30 @@ namespace cryptonote
     return epee::http_server_impl_base<core_rpc_server, connection_context>::init(m_port, m_bind_ip);
   }
   //------------------------------------------------------------------------------------------------------------------------------
-  bool core_rpc_server::check_core_ready()
+  bool core_rpc_server::check_core_busy()
   {
-    if(!m_p2p.get_payload_object().is_synchronized())
-    {
-      return false;
-    }
     if(m_p2p.get_payload_object().get_core().get_blockchain_storage().is_storing_blockchain())
     {
       return false;
     }
     return true;
   }
+#define CHECK_CORE_BUSY() if(!check_core_busy()){res.status =  CORE_RPC_STATUS_BUSY;return true;}
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::check_core_ready()
+  {
+    if(!m_p2p.get_payload_object().is_synchronized())
+    {
+      return false;
+    }
+    return check_core_busy();
+  }
 #define CHECK_CORE_READY() if(!check_core_ready()){res.status =  CORE_RPC_STATUS_BUSY;return true;}
 
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_height(const COMMAND_RPC_GET_HEIGHT::request& req, COMMAND_RPC_GET_HEIGHT::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
+    CHECK_CORE_BUSY();
     res.height = m_core.get_current_blockchain_height();
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -74,8 +105,9 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_info(const COMMAND_RPC_GET_INFO::request& req, COMMAND_RPC_GET_INFO::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
+    CHECK_CORE_BUSY();
     res.height = m_core.get_current_blockchain_height();
+    res.target_height = m_core.get_target_blockchain_height();
     res.difficulty = m_core.get_blockchain_storage().get_difficulty_for_next_block();
     res.tx_count = m_core.get_blockchain_storage().get_total_transactions() - res.height; //without coinbase
     res.tx_pool_size = m_core.get_pool_transactions_count();
@@ -91,9 +123,10 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request& req, COMMAND_RPC_GET_BLOCKS_FAST::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
+    CHECK_CORE_BUSY();
     std::list<std::pair<block, std::list<transaction> > > bs;
-    if(!m_core.find_blockchain_supplement(req.block_ids, bs, res.current_height, res.start_height, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
+
+    if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, bs, res.current_height, res.start_height, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
     {
       res.status = "Failed";
       return false;
@@ -115,7 +148,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_random_outs(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request& req, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
+    CHECK_CORE_BUSY();
     res.status = "Failed";
     if(!m_core.get_random_outs_for_amounts(req, res))
     {
@@ -144,7 +177,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_indexes(const COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::request& req, COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
+    CHECK_CORE_BUSY();
     bool r = m_core.get_tx_outputs_gindexs(req.txid, res.o_indexes);
     if(!r)
     {
@@ -158,7 +191,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::request& req, COMMAND_RPC_GET_TRANSACTIONS::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
+    CHECK_CORE_BUSY();
     std::vector<crypto::hash> vh;
     BOOST_FOREACH(const auto& tx_hex_str, req.txs_hashes)
     {
@@ -233,7 +266,6 @@ namespace cryptonote
       return true;
     }
 
-
     NOTIFY_NEW_TRANSACTIONS::request r;
     r.txs.push_back(tx_blob);
     m_core.get_protocol()->relay_transactions(r, fake_context);
@@ -252,7 +284,10 @@ namespace cryptonote
       return true;
     }
 
-    if(!m_core.get_miner().start(adr, static_cast<size_t>(req.threads_count)))
+    boost::thread::attributes attrs;
+    attrs.set_stack_size(THREAD_STACK_SIZE);
+
+    if(!m_core.get_miner().start(adr, static_cast<size_t>(req.threads_count), attrs))
     {
       res.status = "Failed, mining not started";
       return true;
@@ -263,7 +298,6 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_stop_mining(const COMMAND_RPC_STOP_MINING::request& req, COMMAND_RPC_STOP_MINING::response& res, connection_context& cntx)
   {
-    CHECK_CORE_READY();
     if(!m_core.get_miner().stop())
     {
       res.status = "Failed, mining not stopped";
@@ -273,9 +307,39 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
-  bool core_rpc_server::on_getblockcount(const COMMAND_RPC_GETBLOCKCOUNT::request& req, COMMAND_RPC_GETBLOCKCOUNT::response& res, connection_context& cntx)
+  bool core_rpc_server::on_mining_status(const COMMAND_RPC_MINING_STATUS::request& req, COMMAND_RPC_MINING_STATUS::response& res, connection_context& cntx)
   {
     CHECK_CORE_READY();
+
+    const miner& lMiner = m_core.get_miner();
+    res.active = lMiner.is_mining();
+    
+    if ( lMiner.is_mining() ) {
+      res.speed = lMiner.get_speed();
+      res.threads_count = lMiner.get_threads_count();
+      const account_public_address& lMiningAdr = lMiner.get_mining_address();
+      res.address = get_account_address_as_str(lMiningAdr);
+    }
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_save_bc(const COMMAND_RPC_SAVE_BC::request& req, COMMAND_RPC_SAVE_BC::response& res, connection_context& cntx)
+  {
+    CHECK_CORE_BUSY();
+    if( !m_core.get_blockchain_storage().store_blockchain() )
+    {
+      res.status = "Error while storing blockhain";
+      return true;
+    }
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_getblockcount(const COMMAND_RPC_GETBLOCKCOUNT::request& req, COMMAND_RPC_GETBLOCKCOUNT::response& res, connection_context& cntx)
+  {
+    CHECK_CORE_BUSY();
     res.count = m_core.get_current_blockchain_height();
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -283,7 +347,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_getblockhash(const COMMAND_RPC_GETBLOCKHASH::request& req, COMMAND_RPC_GETBLOCKHASH::response& res, epee::json_rpc::error& error_resp, connection_context& cntx)
   {
-    if(!check_core_ready())
+    if(!check_core_busy())
     {
       error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
       error_resp.message = "Core is busy";
@@ -356,8 +420,7 @@ namespace cryptonote
       return false;
     }
     blobdata block_blob = t_serializable_object_to_blob(b);
-    crypto::public_key tx_pub_key = null_pkey;
-    cryptonote::parse_and_validate_tx_extra(b.miner_tx, tx_pub_key);
+    crypto::public_key tx_pub_key = cryptonote::get_tx_pub_key_from_extra(b.miner_tx);
     if(tx_pub_key == null_pkey)
     {
       error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
@@ -382,7 +445,7 @@ namespace cryptonote
       return false;
     }
     res.blocktemplate_blob = string_tools::buff_to_hex_nodelimer(block_blob);
-
+    res.status = CORE_RPC_STATUS_OK;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -402,15 +465,33 @@ namespace cryptonote
       error_resp.message = "Wrong block blob";
       return false;
     }
-    cryptonote::block_verification_context bvc = AUTO_VAL_INIT(bvc);
-    m_core.handle_incoming_block(blockblob, bvc);
-    if(!bvc.m_added_to_main_chain)
+    
+    // Fixing of high orphan issue for most pools
+    // Thanks Boolberry!
+    block b = AUTO_VAL_INIT(b);
+    if(!parse_and_validate_block_from_blob(blockblob, b))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_WRONG_BLOCKBLOB;
+      error_resp.message = "Wrong block blob";
+      return false;
+    }
+
+    // Fix from Boolberry neglects to check block
+    // size, do that with the function below
+    if(!m_core.check_incoming_block_size(blockblob))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_WRONG_BLOCKBLOB_SIZE;
+      error_resp.message = "Block bloc size is too big, rejecting block";
+      return false;
+    }
+
+    if(!m_core.handle_block_found(b))
     {
       error_resp.code = CORE_RPC_ERROR_CODE_BLOCK_NOT_ACCEPTED;
       error_resp.message = "Block not accepted";
       return false;
     }
-    res.status = "OK";
+    res.status = CORE_RPC_STATUS_OK;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -442,7 +523,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_last_block_header(const COMMAND_RPC_GET_LAST_BLOCK_HEADER::request& req, COMMAND_RPC_GET_LAST_BLOCK_HEADER::response& res, epee::json_rpc::error& error_resp, connection_context& cntx)
   {
-    if(!check_core_ready())
+    if(!check_core_busy())
     {
       error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
       error_resp.message = "Core is busy.";
@@ -477,7 +558,7 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_block_header_by_hash(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH::request& req, COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH::response& res, epee::json_rpc::error& error_resp, connection_context& cntx){
-    if(!check_core_ready())
+    if(!check_core_busy())
     {
       error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
       error_resp.message = "Core is busy.";
@@ -518,7 +599,7 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_block_header_by_height(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::request& req, COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::response& res, epee::json_rpc::error& error_resp, connection_context& cntx){
-    if(!check_core_ready())
+    if(!check_core_busy())
     {
       error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
       error_resp.message = "Core is busy.";
@@ -536,7 +617,7 @@ namespace cryptonote
     if (!have_block)
     {
       error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
-      error_resp.message = "Internal error: can't get block by height. Height = " + req.height + '.';
+      error_resp.message = "Internal error: can't get block by height. Height = " + std::to_string(req.height) + '.';
       return false;
     }
     bool responce_filled = fill_block_header_responce(blk, false, req.height, block_hash, res.block_header);
@@ -546,6 +627,46 @@ namespace cryptonote
       error_resp.message = "Internal error: can't produce valid response.";
       return false;
     }
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_get_connections(const COMMAND_RPC_GET_CONNECTIONS::request& req, COMMAND_RPC_GET_CONNECTIONS::response& res, epee::json_rpc::error& error_resp, connection_context& cntx)
+  {
+    if(!check_core_busy())
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
+      error_resp.message = "Core is busy.";
+      return false;
+    }
+
+    res.connections = m_p2p.get_payload_object().get_connections();
+
+    res.status = CORE_RPC_STATUS_OK;
+
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_get_info_json(const COMMAND_RPC_GET_INFO::request& req, COMMAND_RPC_GET_INFO::response& res, epee::json_rpc::error& error_resp, connection_context& cntx)
+  {
+    if(!check_core_busy())
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
+      error_resp.message = "Core is busy.";
+      return false;
+    }
+
+    res.height = m_core.get_current_blockchain_height();
+    res.target_height = m_core.get_target_blockchain_height();
+    res.difficulty = m_core.get_blockchain_storage().get_difficulty_for_next_block();
+    res.tx_count = m_core.get_blockchain_storage().get_total_transactions() - res.height; //without coinbase
+    res.tx_pool_size = m_core.get_pool_transactions_count();
+    res.alt_blocks_count = m_core.get_blockchain_storage().get_alternative_blocks_count();
+    uint64_t total_conn = m_p2p.get_connections_count();
+    res.outgoing_connections_count = m_p2p.get_outgoing_connections_count();
+    res.incoming_connections_count = total_conn - res.outgoing_connections_count;
+    res.white_peerlist_size = m_p2p.get_peerlist_manager().get_white_peers_count();
+    res.grey_peerlist_size = m_p2p.get_peerlist_manager().get_gray_peers_count();
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }

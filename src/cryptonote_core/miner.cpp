@@ -1,7 +1,32 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include <sstream>
 #include <numeric>
@@ -23,7 +48,8 @@ using namespace epee;
 #include "miner.h"
 
 
-
+extern "C" void slow_hash_allocate_state();
+extern "C" void slow_hash_free_state();
 namespace cryptonote
 {
 
@@ -188,12 +214,21 @@ namespace cryptonote
     return true;
   }
   //-----------------------------------------------------------------------------------------------------
-  bool miner::is_mining()
+  bool miner::is_mining() const
   {
     return !m_stop;
   }
+  //-----------------------------------------------------------------------------------------------------
+  const account_public_address& miner::get_mining_address() const
+  {
+    return m_mine_address;
+  }
+  //-----------------------------------------------------------------------------------------------------
+  uint32_t miner::get_threads_count() const {
+    return m_threads_total;
+  }
   //----------------------------------------------------------------------------------------------------- 
-  bool miner::start(const account_public_address& adr, size_t threads_count)
+  bool miner::start(const account_public_address& adr, size_t threads_count, const boost::thread::attributes& attrs)
   {
     m_mine_address = adr;
     m_threads_total = static_cast<uint32_t>(threads_count);
@@ -218,18 +253,22 @@ namespace cryptonote
     boost::interprocess::ipcdetail::atomic_write32(&m_thread_index, 0);
 
     for(size_t i = 0; i != threads_count; i++)
-      m_threads.push_back(boost::thread(boost::bind(&miner::worker_thread, this)));
+    {
+      m_threads.push_back(boost::thread(attrs, boost::bind(&miner::worker_thread, this)));
+    }
 
     LOG_PRINT_L0("Mining has started with " << threads_count << " threads, good luck!" )
     return true;
   }
   //-----------------------------------------------------------------------------------------------------
-  uint64_t miner::get_speed()
+  uint64_t miner::get_speed() const
   {
-    if(is_mining())
+    if(is_mining()) {
       return m_current_hash_rate;
-    else
+    }
+    else {
       return 0;
+    }
   }
   //-----------------------------------------------------------------------------------------------------
   void miner::send_stop_signal()
@@ -269,7 +308,10 @@ namespace cryptonote
   {
     if(m_do_mining)
     {
-      start(m_mine_address, m_threads_total);
+      boost::thread::attributes attrs;
+      attrs.set_stack_size(THREAD_STACK_SIZE);
+
+      start(m_mine_address, m_threads_total, attrs);
     }
   }
   //-----------------------------------------------------------------------------------------------------
@@ -304,6 +346,7 @@ namespace cryptonote
     difficulty_type local_diff = 0;
     uint32_t local_template_ver = 0;
     block b;
+	  slow_hash_allocate_state();
     while(!m_stop)
     {
       if(m_pausers_count)//anti split workaround
@@ -352,6 +395,7 @@ namespace cryptonote
       nonce+=m_threads_total;
       ++m_hashes;
     }
+	  slow_hash_free_state();
     LOG_PRINT_L0("Miner thread stopped ["<< th_local_index << "]");
     return true;
   }

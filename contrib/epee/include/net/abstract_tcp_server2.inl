@@ -52,11 +52,11 @@ PRAGMA_WARNING_DISABLE_VS(4355)
     typename t_protocol_handler::config_type& config, volatile uint32_t& sock_count, i_connection_filter* &pfilter)
                           : strand_(io_service),
                             socket_(io_service),
-                            m_protocol_handler(this, config, context), 
                             m_want_close_connection(0), 
                             m_was_shutdown(0), 
                             m_ref_sockets_count(sock_count), 
-                            m_pfilter(pfilter)
+                            m_pfilter(pfilter),
+                            m_protocol_handler(this, config, context)
   {
     boost::interprocess::ipcdetail::atomic_inc32(&m_ref_sockets_count);
   }
@@ -524,7 +524,7 @@ POP_WARNINGS
   }
   //---------------------------------------------------------------------------------
   template<class t_protocol_handler>
-  bool boosted_tcp_server<t_protocol_handler>::run_server(size_t threads_count, bool wait)
+  bool boosted_tcp_server<t_protocol_handler>::run_server(size_t threads_count, bool wait, const boost::thread::attributes& attrs)
   {
     TRY_ENTRY();
     m_threads_count = threads_count;
@@ -538,7 +538,7 @@ POP_WARNINGS
       for (std::size_t i = 0; i < threads_count; ++i)
       {
         boost::shared_ptr<boost::thread> thread(new boost::thread(
-          boost::bind(&boosted_tcp_server<t_protocol_handler>::worker_thread, this)));
+          attrs, boost::bind(&boosted_tcp_server<t_protocol_handler>::worker_thread, this)));
         m_threads.push_back(thread);
       }
       CRITICAL_REGION_END();

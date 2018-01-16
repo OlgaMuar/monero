@@ -34,9 +34,13 @@ static const char _NR[] = {
 #include <stddef.h>
 #include <time.h> 
 #include <sys/timeb.h>
-#include <malloc.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+
+#ifndef __APPLE__
+#include <malloc.h>
+#endif
 
 #ifdef WIN32
 #include <process.h>
@@ -62,31 +66,6 @@ static const char _NR[] = {
 #ifndef min
 # define min(a,b) (((a)<(b)) ? (a) : (b))
 #endif /* min */
-
-typedef struct _oaes_key
-{
-	size_t data_len;
-	uint8_t *data;
-	size_t exp_data_len;
-	uint8_t *exp_data;
-	size_t num_keys;
-	size_t key_base;
-} oaes_key;
-
-typedef struct _oaes_ctx
-{
-#ifdef OAES_HAVE_ISAAC
-  randctx * rctx;
-#endif // OAES_HAVE_ISAAC
-
-#ifdef OAES_DEBUG
-	oaes_step_cb step_cb;
-#endif // OAES_DEBUG
-
-	oaes_key * key;
-	OAES_OPTION options;
-	uint8_t iv[OAES_BLOCK_SIZE];
-} oaes_ctx;
 
 // "OAES<8-bit header version><8-bit type><16-bit options><8-bit flags><56-bit reserved>"
 static uint8_t oaes_header[OAES_BLOCK_SIZE] = {

@@ -1,6 +1,32 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include <alloca.h>
 #include <cassert>
@@ -50,6 +76,7 @@ namespace crypto {
     return &reinterpret_cast<const unsigned char &>(scalar);
   }
 
+  /* generate a random 32-byte (256-bit) integer and copy it to res */
   static inline void random_scalar(ec_scalar &res) {
     unsigned char tmp[64];
     generate_random_bytes(64, tmp);
@@ -62,12 +89,32 @@ namespace crypto {
     sc_reduce32(&res);
   }
 
-  void crypto_ops::generate_keys(public_key &pub, secret_key &sec) {
+  /* 
+   * generate public and secret keys from a random 256-bit integer
+   * TODO: allow specifiying random value (for wallet recovery)
+   * 
+   */
+  secret_key crypto_ops::generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key, bool recover) {
     lock_guard<mutex> lock(random_lock);
     ge_p3 point;
-    random_scalar(sec);
+
+    secret_key rng;
+
+    if (recover)
+    {
+      rng = recovery_key;
+    }
+    else
+    {
+      random_scalar(rng);
+    }
+    sec = rng;
+    sc_reduce32(&sec);  // reduce in case second round of keys (sendkeys)
+
     ge_scalarmult_base(&point, &sec);
     ge_p3_tobytes(&pub, &point);
+
+    return rng;
   }
 
   bool crypto_ops::check_key(const public_key &key) {

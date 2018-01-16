@@ -1,6 +1,32 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 /* serialization.h
  *
@@ -10,6 +36,7 @@
 #include <vector>
 #include <string>
 #include <boost/type_traits/is_integral.hpp>
+#include <boost/type_traits/integral_constant.hpp>
 
 template <class T>
 struct is_blob_type { typedef boost::false_type type; };
@@ -79,8 +106,10 @@ inline bool do_serialize(Archive &ar, T &v)
     if (!r || !ar.stream().good()) return false; \
   } while(0);
 #define FIELDS(f) \
+  do { \
     bool r = ::do_serialize(ar, f); \
-    if (!r || !ar.stream().good()) return false;
+    if (!r || !ar.stream().good()) return false; \
+  } while(0);
 #define FIELD(f) \
   do { \
     ar.tag(#f); \
@@ -90,6 +119,12 @@ inline bool do_serialize(Archive &ar, T &v)
 #define VARINT_FIELD(f) \
   do { \
     ar.tag(#f); \
+    ar.serialize_varint(f); \
+    if (!ar.stream().good()) return false; \
+  } while(0);
+#define VARINT_FIELD_N(t, f) \
+  do { \
+    ar.tag(t); \
     ar.serialize_varint(f); \
     if (!ar.stream().good()) return false; \
   } while(0);
@@ -122,7 +157,7 @@ namespace serialization {
       {
         std::ios_base::iostate state = s.rdstate();
         result = EOF == s.peek();
-        s.setstate(state);
+        s.clear(state);
       }
       return result;
     }
